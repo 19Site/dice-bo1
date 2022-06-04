@@ -1,0 +1,733 @@
+﻿<!doctype html>
+<html>
+	<head>
+		<META HTTP-EQUIV="Pragma" CONTENT="no-cache">
+		<META HTTP-EQUIV="Expires" CONTENT="-1">
+		<META http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+		<title>Dice!</title>
+		<LINK REL='SHORTCUT ICON' HREF='./img/logo_index.ico'>
+		<style type='text/css'>
+		</style>
+		<script type='text/javascript' src='./jquery.js'></script>
+		<script type='text/javascript' src='./jquery.xTable.js'></script>
+		<script type='text/javascript' src='./PHP_DB.php'></script>
+		<script type='text/javascript'>
+			
+			var game = {sicBo: {}};
+			game.sicBo = {
+				containerId: null, // 賭台 container ID
+				currentChip: 10, // 現在已選擇的籌碼
+				reset: true, // 賭台已清空
+				
+				betList: [], // 記錄用戶下注資料
+				
+				// 資料庫控制
+				dbControl: {
+					db: PHPDB(),
+					query: function(sql, handler) {
+						this.db.query("sicbo.db", sql, handler);
+					},
+					init: function() {
+						this.query(["CREATE TABLE dice_result(game int, dice1 int, dice2 int, dice3 int, time datetime, PRIMARY KEY(game));"]);
+					},
+					insertBetRecord: function(d1, d2, d3) {
+						this.query(["insert into dice_result(game, dice1, dice2, dice3, time) values((SELECT COUNT(*) FROM dice_result), "+d1+", "+d2+", "+d3+", DATETIME('NOW'));"]);
+					},
+					showRecord: function(table) {
+						this.query(["select * from "+table+";"], function(e) {
+							alert(e);
+						});
+					}
+				},
+				
+				// 賭台初始化
+				initBetTable: function(e) {
+					$(this.containerId+ "TABLE[name=betTable] DIV")
+						.css({cursor: "pointer"})
+						.bind("mouseover", function(e) {
+							//$(this).css({backgroundColor: "#DDDDDD"});
+						})
+						.bind("mouseout", function(e) {
+							//$(this).css({backgroundColor: "#FFFFFF"});
+						})
+						.bind("click", {self: this}, function(e) {
+							if( !e.data.self.reset ) {
+								e.data.self.resetBetTable();
+								e.data.self.betList = [];
+							}
+							
+							// 放下籌碼
+							$("<img name='floatChip' src='./img/c"+e.data.self.currentChip+".gif' style='height: 40px; position: absolute; top: "+($(this).offset().top+2)+"px; left: "+($(this).offset().left+2)+"px;' />")
+								.appendTo($(e.data.self.containerId));
+							
+							// 下注記錄
+							e.data.self.betList[e.data.self.betList.length] = [$(this).attr("name"), e.data.self.currentChip];
+							$(e.data.self.containerId+ "DIV[name=controlPanel] DIV[name=betRecord]")
+								.append($("<div>"+$(this).attr("name")+" -- "+e.data.self.currentChip+"</div>"));
+						});
+				},
+				
+				// 骰子初始化
+				initDice: function(e) {
+					$(this.containerId+ "DIV[name=dice] IMG")
+						.bind("click", function() {
+							var self = this;
+							
+							window.setInterval(function() {
+								var num = Math.round(Math.random()* 5)+ 1;
+								$(self).attr("src", "./img/d"+num+".gif");
+							}, 50);
+						});
+				},
+				
+				// 控制項初始化
+				initControlPanel: function(e) {
+					$(this.containerId+ "DIV[name=controlPanel] IMG[name^=cp]")
+						.css({cursor: "pointer"})
+						.bind("click", {self: this}, function(e) {
+							$(e.data.self+ "DIV[name=controlPanel] IMG[name^=cp]")
+								.css({height: "50px", margin: "10px 3px"});
+							$(this)
+								.css({height: "70px", margin: "0px 3px"});
+							
+							e.data.self.currentChip = $(this).attr("src").replace(/^\.\/img\/c/, "").replace(/\.gif$/, "");
+						});
+					
+					$(this.containerId+ "DIV[name=controlPanel] IMG[name=cp10]").trigger("click");
+				},
+				
+				// 重設賭台 (清空籌碼及色彩, 0=all, 1=chip, 2=color)
+				resetBetTable: function(code) {
+					this.reset = true;
+					
+					// 重設色彩
+					if( code != 1 )
+						$(this.containerId+ "TABLE[name=betTable] DIV").css({backgroundColor: "#FFFFFF"});
+					// 清空籌碼
+					if( code != 2 )
+						$(this.containerId+ "IMG[name=floatChip]").remove();
+				},
+				
+				// 轉骰子
+				rollDice: function(v1, v2, v3) {
+					// 重設賭台
+					this.resetBetTable(2);
+					this.reset = false;
+					
+					var self = this;
+					var d1 = $(this.containerId+ "DIV[name=dice] IMG:eq(0)");
+					var d2 = $(this.containerId+ "DIV[name=dice] IMG:eq(1)");
+					var d3 = $(this.containerId+ "DIV[name=dice] IMG:eq(2)");
+					
+					var roll = window.setInterval(function() {
+						var num1 = Math.round(Math.random()* 5)+ 1;
+						$(d1).attr("src", "./img/d"+num1+".gif");
+						
+						var num2 = Math.round(Math.random()* 5)+ 1;
+						$(d2).attr("src", "./img/d"+num2+".gif");
+						
+						var num3 = Math.round(Math.random()* 5)+ 1;
+						$(d3).attr("src", "./img/d"+num3+".gif");
+					}, 1);
+					
+					window.setTimeout(function() { 
+						window.clearInterval(roll);
+						
+						if( typeof v1 == "number" )
+							$(d1).attr("src", "./img/d"+v1+".gif");
+						if( typeof v2 == "number" )
+							$(d2).attr("src", "./img/d"+v2+".gif");
+						if( typeof v3 == "number" )
+							$(d3).attr("src", "./img/d"+v3+".gif");
+						
+						// 把結果寫入資料庫
+						self.dbControl.insertBetRecord(
+							parseInt(d1.attr("src").replace(/^\.\/img\/d/, "").replace(/\.gif$/, "")),
+							parseInt(d2.attr("src").replace(/^\.\/img\/d/, "").replace(/\.gif$/, "")),
+							parseInt(d3.attr("src").replace(/^\.\/img\/d/, "").replace(/\.gif$/, ""))
+						);
+						
+						// 骰子後繼處理
+						self.rollDiceHandler(
+							parseInt(d1.attr("src").replace(/^\.\/img\/d/, "").replace(/\.gif$/, "")),
+							parseInt(d2.attr("src").replace(/^\.\/img\/d/, "").replace(/\.gif$/, "")),
+							parseInt(d3.attr("src").replace(/^\.\/img\/d/, "").replace(/\.gif$/, ""))
+						);
+					}, 100);
+				},
+				
+				// 轉骰子後的處理
+				rollDiceHandler: function(d1, d2, d3) {
+					// 存起開出的單位
+					var wins = [];
+					
+					// 處理大小
+					if( (d1+ d2+ d3) <= 10 )
+						wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=bs_s_]").css({backgroundColor: "#FFFF56"});
+					else
+						wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=bs_b_]").css({backgroundColor: "#FFFF56"});
+					
+					// 處理單骰
+					wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=sd_"+d1+"_]").css({backgroundColor: "#FFFF56"});
+					wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=sd_"+d2+"_]").css({backgroundColor: "#FFFF56"});
+					wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=sd_"+d3+"_]").css({backgroundColor: "#FFFF56"});
+					
+					// 處理雙骰
+					var da = [d1, d2, d3];
+					da.sort();
+					wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dbd_"+da[0]+"n"+da[1]+"_]").css({backgroundColor: "#FFFF56"});
+					wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dbd_"+da[0]+"n"+da[2]+"_]").css({backgroundColor: "#FFFF56"});
+					wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dbd_"+da[1]+"n"+da[2]+"_]").css({backgroundColor: "#FFFF56"});
+					
+					// 處理圍骰
+					if( d1==d2 && d2==d3 ) {
+						wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same_]").css({backgroundColor: "#FFFF56"});
+						
+						// 單獨圍骰
+						switch(d1) {
+							case 1:
+								wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same1_]").css({backgroundColor: "#FFFF56"});
+								break;
+							case 2:
+								wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same2_]").css({backgroundColor: "#FFFF56"});
+								break;
+							case 3:
+								wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same3_]").css({backgroundColor: "#FFFF56"});
+								break;
+							case 4:
+								wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same4_]").css({backgroundColor: "#FFFF56"});
+								break;
+							case 5:
+								wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same5_]").css({backgroundColor: "#FFFF56"});
+								break;
+							case 6:
+								wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=dd_same6_]").css({backgroundColor: "#FFFF56"});
+								break;
+							default:
+								break;
+						}
+					}
+					
+					// 處理開出點數總和
+					switch(d1+ d2+ d3) {
+						case 4:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_4_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 5:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_5_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 6:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_6_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 7:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_7_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 8:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_8_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 9:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_9_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 10:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_10_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 11:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_11_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 12:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_12_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 13:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_13_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 14:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_14_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 15:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_15_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 16:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_16_]").css({backgroundColor: "#FFFF56"});
+							break;
+						case 17:
+							wins[wins.length] = $(this.containerId+ "TABLE[name=betTable] DIV[name^=pp_17_]").css({backgroundColor: "#FFFF56"});
+							break;
+						default:
+							break;
+					}
+					
+					// 處理開出的單位
+					var name = [];
+					for( var i in wins )
+						name[name.length] = wins[i].attr("name");
+					wins = [name[0]];
+					
+					o: for( var i in name ) {
+						for( var j in wins )
+							if( name[i] == wins[j] && !/^sd_/.test(name[i]) )
+								continue o;
+						wins[wins.length] = name[i];
+					}
+					
+					
+				},
+				
+				// 初始化
+				init: function(containerId) {
+					this.containerId = containerId+ " ";
+					this.initBetTable();
+					this.initDice();
+					this.initControlPanel();
+					this.dbControl.init();
+				}
+			}
+			
+			
+			$(window.document).ready(function() {
+				game.sicBo.init("#game");
+				
+			});
+		</script>
+	</head>
+<body style='margin: 0px 0px 0px 0px;'>
+	
+	<div id='game'>
+		
+		<div name='dice' style='text-align: center; margin: 0px auto; display: solid 1px #000000; padding: 10px 0px;'>
+			<img src='./img/d1.gif' style='width: 80px; height: 80px;' />&nbsp;&nbsp;
+			<img src='./img/d2.gif' style='width: 80px; height: 80px;' />&nbsp;&nbsp;
+			<img src='./img/d3.gif' style='width: 80px; height: 80px;' />
+		</div>
+		
+		<table name='betTable' cellspacing='0' cellpadding='0' style='margin: 0px auto; border-collapse: collapse; border: solid 1px #000000; font-family: verdana;'>
+			<tr>
+				<td>
+					<table cellspacing='0' cellpadding='0'>
+						<tr>
+							<td><div name='bs_b_2' style='height: 229px; width: 220px; text-align: center; border: solid 1px #000000;'><span style='font-size: 100px;'>大</span><br />1 wins 2</div></td>
+							<td>
+								<!-- three same -->
+								<table cellspacing='0' cellpadding='0'>
+									<tr>
+										<td>
+											<table cellspacing='0' cellpadding='0'>
+												<tr>
+													<td>
+														<div name='dd_same1_150' style='height: 75px; width: 80px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 150
+														</div>
+													</td>
+												</tr>
+												<tr>
+													<td>
+														<div name='dd_same2_150' style='height: 75px; width: 80px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 150
+														</div>
+													</td>
+												</tr>
+												<tr>
+													<td>
+														<div name='dd_same3_150' style='height: 75px; width: 80px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 150
+														</div>
+													</td>
+												</tr>
+											</table>
+										</td>
+										<td>
+											<div name='dd_same_24' style='height: 152px; width: 332px; text-align: center; border: solid 1px #000000;'>
+												<table cellspacing='0' cellpadding='0' style='width: 100%; height: 100%;'>
+													<tr>
+														<td style='text-align: center;'>
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block;' />
+														</td>
+														<td style='text-align: center;'>
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' />
+														</td>
+														<td style='text-align: center;'>
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' />
+														</td>
+														<td style='text-align: center;'>
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' />
+														</td>
+													</tr>
+													<tr>
+														<td style='text-align: center;'>
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block;' />
+														</td>
+														<td colspan='2'>1 wins 24</td>
+														<td style='text-align: center;'>
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' />
+														</td>
+													</tr>
+												</table>
+											</div>
+											<table cellspacing='0' cellpadding='0'>
+												<tr>
+													<td>
+														<div name='dbd_1n1_8' style='height: 75px; width: 53px; font-size: 10px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 8
+														</div>
+													</td>
+													<td>
+														<div name='dbd_2n2_8' style='height: 75px; width: 54px; font-size: 10px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 8
+														</div>
+													</td>
+													<td>
+														<div name='dbd_3n3_8' style='height: 75px; width: 54px; font-size: 10px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 8
+														</div>
+													</td>
+													<td>
+														<div name='dbd_4n4_8' style='height: 75px; width: 54px; font-size: 10px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 8
+														</div>
+													</td>
+													<td>
+														<div name='dbd_5n5_8' style='height: 75px; width: 54px; font-size: 10px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 8
+														</div>
+													</td>
+													<td>
+														<div name='dbd_6n6_8' style='height: 75px; width: 53px; font-size: 10px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 8
+														</div>
+													</td>
+												</tr>
+											</table>
+										</td>
+										<td>
+											<table cellspacing='0' cellpadding='0'>
+												<tr>
+													<td>
+														<div name='dd_same4_150' style='height: 75px; width: 80px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 150
+														</div>
+													</td>
+												</tr>
+												<tr>
+													<td>
+														<div name='dd_same5_150' style='height: 75px; width: 80px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 150
+														</div>
+													</td>
+												</tr>
+												<tr>
+													<td>
+														<div name='dd_same6_150' style='height: 75px; width: 80px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' />
+															<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+															1 wins 150
+														</div>
+													</td>
+												</tr>
+											</table>
+										</td>
+									</tr>
+								</table>
+							</td>
+							<td><div name='bs_s_2' style='height: 229px; width: 220px; text-align: center; border: solid 1px #000000;'><span style='font-size: 100px;'>小</span><br />1 wins 2</div></td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<table cellspacing='0' cellpadding='0'>
+						<tr>
+							<td>
+								<div name='pp_4_50' style='height: 80px; width: 66px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>4</span><br />1 wins 50
+								</div>
+							</td>
+							<td>
+								<div name='pp_5_18' style='height: 80px; width: 66px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>5</span><br />1 wins 18
+								</div>
+							</td>
+							<td>
+								<div name='pp_6_14' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>6</span><br />1 wins 14
+								</div>
+							</td>
+							<td>
+								<div name='pp_7_12' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>7</span><br />1 wins 12
+								</div>
+							</td>
+							<td>
+								<div name='pp_8_8' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>8</span><br />1 wins 8
+								</div>
+							</td>
+							<td>
+								<div name='pp_9_6' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>9</span><br />1 wins 6
+								</div>
+							</td>
+							<td>
+								<div name='pp_10_6' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>10</span><br />1 wins 6
+								</div>
+							</td>
+							<td>
+								<div name='pp_11_6' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>11</span><br />1 wins 6
+								</div>
+							</td>
+							<td>
+								<div name='pp_12_6' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>12</span><br />1 wins 6
+								</div>
+							</td>
+							<td>
+								<div name='pp_13_8' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>13</span><br />1 wins 8
+								</div>
+							</td>
+							<td>
+								<div name='pp_14_12' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>14</span><br />1 wins 12
+								</div>
+							</td>
+							<td>
+								<div name='pp_15_14' style='height: 80px; width: 65px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>15</span><br />1 wins 14
+								</div>
+							</td>
+							<td>
+								<div name='pp_16_18' style='height: 80px; width: 66px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>16</span><br />1 wins 18
+								</div>
+							</td>
+							<td>
+								<div name='pp_17_50' style='height: 80px; width: 66px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<span style='font-size: 40px;'>17</span><br />1 wins 50
+								</div>
+							</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<table cellspacing='0' cellpadding='0'>
+						<tr>
+							<td>
+								<table cellspacing='0' cellpadding='0'>
+									<tr>
+										<td>
+											<div name='dbd_1n2_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_1n3_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_1n4_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_1n5_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_1n6_6' style='height: 75px; width: 60px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d1.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_2n3_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_2n4_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_2n5_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_2n6_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d2.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_3n4_5' style='height: 75px; width: 60px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_3n5_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_3n6_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d3.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_4n5_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_4n6_5' style='height: 75px; width: 61px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d4.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+										<td>
+											<div name='dbd_5n6_5' style='height: 75px; width: 60px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+												<img src='./img/d5.gif' style='width: 20px; height: 20px; display: inline-block; margin: 10px 0px 0px 0px;' /><br />
+												<img src='./img/d6.gif' style='width: 20px; height: 20px; display: inline-block;' /><br />
+												1 wins 5
+											</div>
+										</td>
+									</tr>
+								</table>
+							</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<table cellspacing='0' cellpadding='0'>
+						<tr>
+							<td>
+								<div name='sd_1_2' style='height: 70px; width: 155px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<img src='./img/d1.gif' style='width: 50px; height: 50px; display: inline-block; margin: 10px 0px 0px 0px;' />
+								</div>
+							</td>
+							<td>
+								<div name='sd_2_2' style='height: 70px; width: 155px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<img src='./img/d2.gif' style='width: 50px; height: 50px; display: inline-block; margin: 10px 0px 0px 0px;' />
+								</div>
+							</td>
+							<td>
+								<div name='sd_3_2' style='height: 70px; width: 155px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<img src='./img/d3.gif' style='width: 50px; height: 50px; display: inline-block; margin: 10px 0px 0px 0px;' />
+								</div>
+							</td>
+							<td>
+								<div name='sd_4_2' style='height: 70px; width: 155px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<img src='./img/d4.gif' style='width: 50px; height: 50px; display: inline-block; margin: 10px 0px 0px 0px;' />
+								</div>
+							</td>
+							<td>
+								<div name='sd_5_2' style='height: 70px; width: 155px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<img src='./img/d5.gif' style='width: 50px; height: 50px; display: inline-block; margin: 10px 0px 0px 0px;' />
+								</div>
+							</td>
+							<td>
+								<div name='sd_6_2' style='height: 70px; width: 155px; font-size: 12px; text-align: center; border: solid 1px #000000;'>
+									<img src='./img/d6.gif' style='width: 50px; height: 50px; display: inline-block; margin: 10px 0px 0px 0px;' />
+								</div>
+							</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+		</table>
+		
+		<br />
+		
+		<div name='controlPanel' style='height: 70px; width: 942px; border: solid 0px #000000; margin: 0px auto;'>
+			<img name='cp10'   src='./img/c10.gif'   style='display: inline-block; height: 50px; margin: 10px 3px; border: solid 0px #000000;' />
+			<img name='cp20'   src='./img/c20.gif'   style='display: inline-block; height: 50px; margin: 10px 3px; border: solid 0px #000000;' />
+			<img name='cp50'   src='./img/c50.gif'   style='display: inline-block; height: 50px; margin: 10px 3px; border: solid 0px #000000;' />
+			<img name='cp100'  src='./img/c100.gif'  style='display: inline-block; height: 50px; margin: 10px 3px; border: solid 0px #000000;' />
+			<img name='cp500'  src='./img/c500.gif'  style='display: inline-block; height: 50px; margin: 10px 3px; border: solid 0px #000000;' />
+			<img name='cp1000' src='./img/c1000.gif' style='display: inline-block; height: 50px; margin: 10px 3px; border: solid 0px #000000;' />
+			
+			<img src='./img/clear.gif' style='display: block; height: 50px; margin: 10px 3px; cursor: pointer; border: solid 0px #000000; float: right;' onclick='javascript: game.sicBo.resetBetTable(0);' />
+			<img src='./img/roll.gif'  style='display: block; height: 50px; margin: 10px 3px; cursor: pointer; border: solid 0px #000000; float: right;' onclick='javascript: game.sicBo.rollDice();' />
+			<img src='./img/roll.gif'  style='display: block; height: 50px; margin: 10px 3px; cursor: pointer; border: solid 0px #000000; float: right;' onclick='javascript: game.sicBo.dbControl.showRecord("dice_result");' />
+			<div name='controlPanel' style='clear: both;'>
+				Bet Record:<br />
+				<div name='betRecord'></div>
+			</div>
+		</div>
+		
+	</div>
+</body>
+</html>
